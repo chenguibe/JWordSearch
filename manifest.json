@@ -2,7 +2,7 @@
   "name": "JWordSearch",
   "short_name": "JWordSearch",
   "description": "A colorful 10x10 word search puzzle game.",
-  "start_url": "./Index.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
