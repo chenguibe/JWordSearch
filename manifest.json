@@ -1,0 +1,25 @@
+{
+  "name": "JWordSearch",
+  "short_name": "JWordSearch",
+  "description": "A colorful 10x10 word search puzzle game.",
+  "start_url": "./Index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEF2FF",
+  "theme_color": "#4F46E5",
+  "icons": [
+    {
+      "src": "https://chenguibe.github.io/JWordSearch/icon192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://chenguibe.github.io/JWordSearch/icon512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>🧩 JWordSearch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-a: #EEF2FF;
+      --bg-b: #FFE4EC;
+      --board-a: #4F46E5;
+      --board-b: #9333EA;
+      --cell: #FFFDF9;
+      --accent: #FB7185;
+      --accent-2: #FBBF24;
+      --success: #10B981;
+      --success-2: #34D399;
+      --timer-a: #38BDF8;
+      --timer-b: #6366F1;
+      --ink: #1E1B4B;
+      --text-sec: #6B6F9E;
+      --pill-scale: 1; /* set to 0.7 on tablet/desktop via JS; phones stay at 1 */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100vw;
+      min-height: 100svh;
+      background: linear-gradient(160deg, var(--bg-a) 0%, var(--bg-b) 100%);
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      /* Reduced side padding to 2px to maximize horizontal space */
+      padding: 15px 2px;
+      overscroll-behavior-y: none; 
+      overflow-x: hidden;
+    }
+
+    #game-container {
+      width: 100%;
+      /* Max-width is set dynamically in JS (see applyGameWidthCap), based on
+         the device's actual screen resolution rather than a static CSS value.
+         Apps Script's web app wrapper can report an inflated page-viewport
+         width even on a phone, so a fixed px cap here isn't safe. */
+      max-width: 100%; 
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      align-items: center;
+      animation: riseIn 0.5s ease-out;
+    }
+
+    @keyframes riseIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    #top-banner {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1844 / 494;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 10px 24px rgba(79, 70, 229, 0.3);
+    }
+
+    #banner-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #hud-row {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+    }
+
+    #timer-box {
+      height: 76px;
+      padding: 0 26px;
+      background: linear-gradient(135deg, var(--timer-a), var(--timer-b));
+      border-radius: 16px;
+      display: flex; justify-content: center; align-items: center;
+      font-family: 'Fredoka', sans-serif; font-weight: 600;
+      font-size: 31px; color: #FFF;
+      box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+    }
+
+    #btn-reset {
+      height: 76px;
+      padding: 0 28px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 16px;
+      font-weight: 800; color: #FFF; border: none; font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(251, 113, 133, 0.4);
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    #btn-reset:active { transform: scale(0.95); box-shadow: 0 2px 6px rgba(251, 113, 133, 0.35); }
+    #btn-reset:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      gap: 4px;
+      background: linear-gradient(135deg, var(--board-a), var(--board-b));
+      border: 8px solid var(--accent-2);
+      border-radius: 20px;
+      width: 100%;
+      aspect-ratio: 1/1;
+      box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35), inset 0 4px 10px rgba(30, 27, 75, 0.3), 0 14px 32px rgba(79, 70, 229, 0.35);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .grid-cell {
+      background: linear-gradient(180deg, #FFFFFF 0%, var(--cell) 55%, #F1ECDD 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 700;
+      color: var(--ink);
+      font-size: clamp(18px, 7vw, 32px); 
+      text-shadow: 0 1.5px 0 rgba(79,70,229,0.18);
+      border-radius: 8px;
+      box-shadow: 0 3px 0 rgba(79,70,229,0.28), inset 0 1px 0 rgba(255,255,255,0.9);
+      transition: transform 0.1s, background 0.15s, box-shadow 0.1s;
+    }
+
+    .grid-cell.active-selection {
+      background: linear-gradient(180deg, var(--accent-2), var(--accent)) !important;
+      color: #FFF !important;
+      transform: scale(0.86) translateY(1px);
+      box-shadow: inset 0 2px 5px rgba(30,27,75,0.35) !important;
+    }
+    .grid-cell.found {
+      background: linear-gradient(180deg, var(--success-2), var(--success)) !important;
+      color: #FFF !important;
+      box-shadow: 0 3px 0 rgba(5,120,87,0.35), inset 0 1px 0 rgba(255,255,255,0.4) !important;
+      animation: foundPop 0.35s ease;
+    }
+
+    @keyframes foundPop {
+      0% { transform: scale(1); }
+      45% { transform: scale(1.18); }
+      100% { transform: scale(1); }
+    }
+
+    #bottom-banner {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 853 / 208.74;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 10px 24px rgba(79, 70, 229, 0.3);
+    }
+
+    #bottom-banner-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #word-bank {
+      display: flex; flex-wrap: wrap; justify-content: center;
+      gap: calc(10px * var(--pill-scale));
+      width: 100%; padding: 0 8px;
+      /* Pulled up to sit on top of the lower portion of the bottom banner.
+         Word count varies each round, so word-bank stays in normal flow and
+         simply grows downward past the banner rather than being boxed into
+         a fixed-height container. */
+      margin-top: -60px;
+      position: relative;
+    }
+
+    .word-pill {
+      background: var(--cell); border-radius: 999px;
+      padding: calc(13px * var(--pill-scale)) calc(22px * var(--pill-scale));
+      font-weight: 800; font-size: calc(22px * var(--pill-scale)); color: var(--ink);
+      border: 2px solid rgba(79,70,229,0.12);
+      box-shadow: 0 3px 10px rgba(79,70,229,0.14);
+      transition: all 0.3s;
+    }
+    .word-pill.found-pill {
+      background: rgba(16,185,129,0.12);
+      color: var(--success);
+      text-decoration: line-through;
+      opacity: 0.9;
+      box-shadow: none;
+      border: 2px solid rgba(16,185,129,0.3);
+    }
+    .word-pill.found-pill::before {
+      content: "✅ ";
+      text-decoration: none;
+    }
+
+    #modal-backdrop { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(30,27,75,0.6); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); display:none; justify-content:center; align-items:center; z-index:9999; padding:20px; }
+    .modal-box { background:var(--cell); border-radius:28px; padding:32px 24px; width:100%; max-width:380px; text-align:center; box-shadow:0 20px 40px rgba(79,70,229,0.35); display:flex; flex-direction:column; gap:16px; color: var(--ink); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+      }
+    }
+
+    #load-progress {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 14px;
+      background: rgba(30, 27, 75, 0.88);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      transition: opacity 0.4s ease;
+    }
+    #load-progress-track {
+      flex: 1;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    #load-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.3s ease;
+    }
+
+    #best-time-display {
+      display: flex;
+      flex-direction: row;
+      align-items: baseline;
+      gap: 8px;
+      background: var(--cell);
+      border-radius: 14px;
+      padding: 10px 22px;
+      box-shadow: 0 3px 10px rgba(79, 70, 229, 0.14);
+      border: 2px solid rgba(79, 70, 229, 0.12);
+    }
+    #best-time-label {
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      color: var(--accent);
+    }
+    #best-time-value {
+      font-family: 'Fredoka', sans-serif;
+      font-weight: 700;
+      font-size: 27px;
+      color: var(--ink);
+    }
+  </style>
+
+  <!-- PWA: manifest + icons + theme color -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://chenguibe.github.io/JWordSearch/icon192.png">
+  <link rel="apple-touch-icon" href="https://chenguibe.github.io/JWordSearch/icon192.png">
+  <meta name="theme-color" content="#4F46E5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="JWordSearch">
+
+  <!--
+    JWordSearch - Audio Data Warehouse
+    Sound assets are hosted on GitHub Pages (chenguibe.github.io) rather than
+    embedded as base64, to keep page weight down. The Audio objects below are
+    created immediately (rather than waiting for window.onload), so fetching
+    is already underway well before the player can interact with anything.
+    Note: <link rel=preload as=audio> is intentionally NOT used here —
+    browser support for that combination (notably Safari) is unreliable, so
+    the eager new Audio()/.load() below is the dependable cross-browser way
+    to preload audio specifically.
+  -->
+  <script>
+    const SOUND_CORRECT   = "https://chenguibe.github.io/JWordSearch/SOUND_CORRECT.mp3";
+    const SOUND_WRONG     = "https://chenguibe.github.io/JWordSearch/SOUND_WRONG.mp3";
+    const SOUND_COMPLETE  = "https://chenguibe.github.io/JWordSearch/SOUND_COMPLETE.mp3";
+    const SOUND_HIGHSCORE = "https://chenguibe.github.io/JWordSearch/SOUND_HIGHSCORE.mp3";
+    const SOUND_CLEAR     = "https://chenguibe.github.io/JWordSearch/SOUND_CLEAR.mp3";
+
+    // Eagerly create and start loading every sound right now (head parse
+    // time), instead of waiting for window.onload. This also gives us
+    // ready-to-play Audio objects for the main script to reuse directly
+    // rather than constructing fresh ones later. Built one at a time with
+    // its own try/catch so a single failure can't leave PRELOADED_AUDIO
+    // entirely missing and break startup downstream.
+    window.PRELOADED_AUDIO = {};
+    [
+      ['correct',   SOUND_CORRECT],
+      ['wrong',     SOUND_WRONG],
+      ['complete',  SOUND_COMPLETE],
+      ['highscore', SOUND_HIGHSCORE],
+      ['clear',     SOUND_CLEAR],
+    ].forEach(([key, src]) => {
+      try {
+        const a = new Audio(src);
+        a.preload = 'auto';
+        a.load();
+        window.PRELOADED_AUDIO[key] = a;
+      } catch (e) {
+        console.warn('Failed to preload sound:', key, e);
+      }
+    });
+  </script>
+
+  <!--
+    JWordSearch - Graphic UI Data Warehouse
+    Banner images are hosted on GitHub Pages (chenguibe.github.io) rather
+    than embedded as base64, to keep page weight down.
+  -->
+  <link rel="preload" as="image" href="https://chenguibe.github.io/JWordSearch/TOP_BANNER.jpeg">
+  <link rel="preload" as="image" href="https://chenguibe.github.io/JWordSearch/BOTTOM_BANNER.jpeg">
+  <script>
+    const TOP_BANNER = "https://chenguibe.github.io/JWordSearch/TOP_BANNER.jpeg";
+    const BOTTOM_BANNER = "https://chenguibe.github.io/JWordSearch/BOTTOM_BANNER.jpeg";
+    [TOP_BANNER, BOTTOM_BANNER].forEach(src => {
+      const img = new Image();
+      img.src = src;
+    });
+  </script>
+</head>
+
+<body>
+  <div id="load-progress">
+    <span id="load-progress-text">Loading assets… 0/7</span>
+    <div id="load-progress-track"><div id="load-progress-bar"></div></div>
+  </div>
+
+  <div id="game-container">
+    <div id="top-banner">
+      <img id="banner-img" alt="">
+      <div id="hud-row">
+        <div id="timer-box">⏱️ <span id="hud-timer">00:00</span></div>
+        <button id="btn-reset">🔄 Reset</button>
+      </div>
+    </div>
+    <div id="grid"></div>
+    <div id="bottom-banner"><img id="bottom-banner-img" alt=""></div>
+    <div id="word-bank"></div>
+    <div id="best-time-display"><span id="best-time-label">BEST (this device)</span><span id="best-time-value">--:--</span></div>
+  </div>
+
+  <div id="modal-backdrop"><div class="modal-box" id="modal-box"></div></div>
+
+  <script>
+    const audioEngine = { correct: null, wrong: null, complete: null, highscore: null, clear: null };
+    
+    let state = { seconds: 0, clockId: null, hasStarted: false, grid: [], targets: [], found: [] };
+    
+    const DICTIONARY = [
+      "SUN", "MOON", "STAR", "CODE", "DATA", "NODE", "HTML", "FILE", "WIFI", "BYTE",
+      "PLANET", "ROCKET", "GALAXY", "SYSTEM", "SERVER", "MODULE", "OBJECT", "MEMORY",
+      "VECTOR", "MATRIX", "PUZZLE", "WIDGET", "ALGORITHM", "ASTRONOMY", "TELESCOPE",
+      "UNIVERSE", "FRAMEWORK", "COMPILER", "INTERFACE", "BLUEPRINT", "STRUCTURE",
+      "JAVASCRIPT", "EXPERIMENT", "TECHNOLOGY", "MICROSCOPE", "LABORATORY",
+      "INNOVATION", "CONNECTION", "ASYNCHRONOUS", "ARCHITECTURE", "PROGRAMMING",
+      "SAND", "WAVE", "TIDE", "BIRD", "BARK", "LEAF", "TREE", "DIRT", "ROCK", "WIND",
+      "NATURE", "FOREST", "ANIMAL", "ENERGY", "WALLABY", "SUNSET", "CANOPY", "BEACH",
+      "OCEAN", "COAST", "RIVER", "CREEK", "FAUNA", "FLORA", "LYREBIRD", "RESERVE",
+      "FERRY", "SHORE", "CLIFF", "TRAIL", "WILDERNESS", "WATERFALL", "EXPEDITION",
+      "SHORELINE", "SANCTUARY", "PENINSULA", "OUTDOORS", "HABITAT", "MARSUPIAL",
+      "ECOLOGY", "CONSERVATION", "SUSTAINABILITY", "ENVIRONMENTAL", "LANDSCAPE",
+      "SCENERY", "HORIZON", "TWILIGHT", "EVENING", "MORNING", "DAYBREAK",
+      "TRIP", "MAP", "ASIA", "PARK", "CITY", "TOWN", "ROAD", "PATH", "TOUR", "TENT",
+      "SAPPORO", "KOWLOON", "TRAVEL", "FLIGHT", "RESORT", "HOTEL", "MOTEL", "TRAIN",
+      "DESTINATION", "PASSENGER", "SIGHTSEEING", "INTERNATIONAL", "METROPOLIS",
+      "MELBOURNE", "SPRINGVALE", "HOKKAIDO", "AIRPORT", "SUITCASE", "PASSPORT",
+      "VACATION", "HOLIDAY", "JOURNEY", "VOYAGE", "TRANSIT", "SUBWAY", "STATION",
+      "STREET", "AVENUE", "BOULEVARD", "NEIGHBORHOOD", "CAFE", "BEAN", "MESH", 
+      "BREW", "MUG", "CUP", "POUR", "MILK", "ART", "GLUE", "CHROME", "FABRIC", 
+      "CRAFT", "COFFEE", "BARISTA", "PASTRY", "BAKERY", "ROAST", "WORKSHOP", 
+      "ULTRALUMEN", "MACCHIATO", "CROISSANT", "ESPRESSO", "LATTE", "CAPPUCCINO", 
+      "BREAKFAST", "LUNCH", "DINNER", "CANVAS", "PAINT", "BRUSH", "SCISSORS", 
+      "DESIGN", "CREATION", "HOBBYIST", "AESTHETIC", "TEXTURE", "MATERIAL", 
+      "PROJECT", "GALLERY", "HOOP", "SHOT", "BALL", "CAR", "TIRE", "GEAR", "SEAT", 
+      "RUN", "JUMP", "PLAY", "BASKET", "BOUNCE", "DRIVING", "GARAGE", "ENGINE", 
+      "MOTOR", "BRAKE", "TRACK", "TOURNAMENT", "REBOUNDING", "DEALERSHIP", 
+      "AUTOMOTIVE", "MAINTENANCE", "REGISTRATION", "CHAMPIONSHIP", "VEHICLE", 
+      "MECHANIC", "HIGHWAY", "FREEWAY"
+    ];
+
+    // ==========================================
+    // BEST TIME (personal record for this device only, stored in
+    // localStorage — there is no backend/server in the PWA build)
+    // ==========================================
+    const BEST_TIME_KEY = 'jwordsearch_best_time';
+
+    function renderBestTime(seconds) {
+      document.getElementById('best-time-value').textContent = format(seconds);
+    }
+
+    function loadBestTime() {
+      try {
+        const stored = localStorage.getItem(BEST_TIME_KEY);
+        if (stored !== null) renderBestTime(parseInt(stored, 10));
+      } catch (e) { /* localStorage unavailable — best time just won't persist */ }
+    }
+
+    function updateBestTime(seconds) {
+      try {
+        const stored = localStorage.getItem(BEST_TIME_KEY);
+        const best = stored !== null ? parseInt(stored, 10) : null;
+        if (best === null || seconds < best) {
+          localStorage.setItem(BEST_TIME_KEY, String(seconds));
+          renderBestTime(seconds);
+          return true; // new record
+        }
+      } catch (e) { /* localStorage unavailable — skip silently */ }
+      return false;
+    }
+
+    // ==========================================
+    // LOADING PROGRESS (5 sounds + 2 banner images = 7 assets)
+    // ==========================================
+    function initLoadProgress() {
+      const bar = document.getElementById('load-progress-bar');
+      const text = document.getElementById('load-progress-text');
+      const wrap = document.getElementById('load-progress');
+      if (!bar || !text || !wrap) return;
+
+      const audioObjs = (window.PRELOADED_AUDIO && Object.values(window.PRELOADED_AUDIO)) || [];
+      const total = audioObjs.length + 2; // + the 2 banner images
+      let loaded = 0;
+
+      function finishUp() {
+        wrap.style.opacity = '0';
+        setTimeout(() => wrap.remove(), 400);
+      }
+
+      function tick() {
+        loaded = Math.min(loaded + 1, total);
+        bar.style.width = Math.round((loaded / total) * 100) + '%';
+        text.textContent = loaded < total ? `Loading assets… ${loaded}/${total}` : 'Ready!';
+        if (loaded >= total) setTimeout(finishUp, 300);
+      }
+
+      audioObjs.forEach(a => {
+        if (a.readyState >= 4) { tick(); return; } // already buffered enough to play through
+        a.addEventListener('canplaythrough', tick, { once: true });
+        a.addEventListener('error', tick, { once: true }); // don't get stuck if a sound fails
+      });
+
+      [['banner-img'], ['bottom-banner-img']].forEach(([id]) => {
+        const img = document.getElementById(id);
+        img.addEventListener('load', tick, { once: true });
+        img.addEventListener('error', tick, { once: true });
+      });
+
+      // Safety net: never leave the bar stuck on screen if something hangs
+      setTimeout(() => { if (loaded < total) finishUp(); }, 8000);
+    }
+
+    // DOMContentLoaded fires as soon as this page's own HTML is parsed —
+    // unlike window.onload, it does NOT wait for external resources (the
+    // banner images or audio) to finish downloading. This is what makes the
+    // grid appear immediately, while the banner images/audio keep loading
+    // quietly in the background and simply pop in whenever they're ready.
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('banner-img').src = TOP_BANNER;
+      document.getElementById('bottom-banner-img').src = BOTTOM_BANNER;
+
+      // Reuse the Audio objects created in <head> (Audio.html), which have
+      // already been loading since before body even started parsing —
+      // creating fresh ones here would just trigger a second, redundant
+      // fetch of the same files. Wrapped defensively: if this ever throws
+      // (e.g. PRELOADED_AUDIO missing for any reason), it must not prevent
+      // the grid below from rendering — that was silently happening before.
+      try {
+        audioEngine.correct   = window.PRELOADED_AUDIO.correct;
+        audioEngine.wrong     = window.PRELOADED_AUDIO.wrong;
+        audioEngine.complete  = window.PRELOADED_AUDIO.complete;
+        audioEngine.highscore = window.PRELOADED_AUDIO.highscore;
+        audioEngine.clear     = window.PRELOADED_AUDIO.clear;
+      } catch (e) { console.warn('Audio setup failed, continuing without sound:', e); }
+
+      try { loadBestTime(); } catch (e) { console.warn('Best-time load failed:', e); }
+      try { initLoadProgress(); } catch (e) { console.warn('Load-progress bar failed:', e); }
+
+      resetGame(); // must always run, no matter what happened above
+    });
+
+    // iOS Safari only allows audio playback that's directly tied to a user
+    // gesture. The very first play() on each element must happen inside a
+    // real touch/click; this "unlocks" it so later programmatic play()
+    // calls (e.g. on a correct/wrong match) keep working for the rest of
+    // the session. Chrome doesn't need this, which is why it worked there
+    // already but stayed silent on iPhone.
+    let audioUnlocked = false;
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      Object.values(audioEngine).forEach(a => {
+        if (!a) return;
+        a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {});
+      });
+    }
+    document.addEventListener('touchstart', unlockAudio, { once: true });
+    document.addEventListener('mousedown', unlockAudio, { once: true });
+
+    document.getElementById('btn-reset').onclick = () => {
+      audioEngine.clear?.play().catch(()=>{});
+      resetGame();
+    };
+
+    function startClock() {
+      clearInterval(state.clockId);
+      state.clockId = setInterval(() => { 
+        state.seconds++; 
+        document.getElementById('hud-timer').innerText = format(state.seconds); 
+      }, 1000);
+    }
+    
+    function stopClock() { clearInterval(state.clockId); }
+    function format(sec) { return `${(sec/60|0).toString().padStart(2,'0')}:${(sec%60).toString().padStart(2,'0')}`; }
+    function shuffle(a) { return [...a].sort(() => Math.random() - 0.5); }
+
+    function resetGame() {
+      stopClock();
+      state = { seconds: 0, clockId: null, hasStarted: false, grid: [], targets: [], found: [] };
+      document.getElementById('hud-timer').innerText = "00:00";
+      
+      let grid = Array(10).fill(0).map(() => Array(10).fill(''));
+      // Grid is 10x10, so the longest a straight (incl. diagonal) line can be is 10 cells.
+      const pool = DICTIONARY.filter(w => w.length >= 3 && w.length <= 10);
+      const chosen = shuffle(pool).slice(0, 10);
+
+      let placed = [];
+      const vecs = [[0,1], [1,0], [1,1], [-1,1], [1,-1], [-1,-1], [0,-1], [-1,0]];
+
+      chosen.forEach(w => {
+        for(let att=0; att<200; att++) {
+          let r = Math.random()*10|0, c = Math.random()*10|0;
+          let [dr, dc] = vecs[Math.random()*vecs.length|0];
+          let fit = true, p = [];
+          for(let i=0; i<w.length; i++) {
+            let nr = r + i*dr, nc = c + i*dc;
+            if(nr<0 || nr>=10 || nc<0 || nc>=10 || (grid[nr][nc] !== '' && grid[nr][nc] !== w[i])) { fit = false; break; }
+            p.push({r:nr, c:nc});
+          }
+          if(fit) { p.forEach((pt,idx) => grid[pt.r][pt.c] = w[idx]); placed.push({word:w, path:p}); break; }
+        }
+      });
+
+      const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      grid = grid.map(row => row.map(cell => cell || alpha[Math.random()*26|0]));
+      
+      state.grid = grid; 
+      state.targets = placed; 
+      state.found = [];
+      
+      paintGridDOM(); 
+      paintBankDOM();
+      applyGameWidthCap();
+      sizeGrid(); 
+    }
+
+    function paintGridDOM() {
+      const dom = document.getElementById('grid');
+      dom.innerHTML = '';
+      
+      state.grid.forEach((r,i) => r.forEach((c,j) => {
+        let div = document.createElement('div'); 
+        div.className = 'grid-cell'; 
+        div.dataset.r = i; 
+        div.dataset.c = j; 
+        div.innerText = c; 
+        dom.appendChild(div);
+      }));
+    }
+
+    function paintBankDOM() {
+      const b = document.getElementById('word-bank'); 
+      b.innerHTML = '';
+      state.targets.forEach(t => {
+        let s = document.createElement('span'); 
+        s.className = `word-pill ${state.found.includes(t.word)?'found-pill':''}`; 
+        s.innerText = t.word;
+        b.appendChild(s);
+      });
+    }
+
+    // ==========================================
+    // ABSOLUTE MAXIMUM HORIZONTAL SIZING
+    // ==========================================
+    function applyGameWidthCap() {
+      const container = document.getElementById('game-container');
+      // Use the device's actual screen resolution, not the page's own layout
+      // viewport (window.innerWidth/clientWidth) — Apps Script's web app
+      // wrapper can report an inflated, desktop-style viewport width even on
+      // a phone, which made a CSS max-width cap shrink the whole card on an
+      // actual iPhone. screen.width reflects the real hardware display and
+      // isn't affected by that wrapper quirk.
+      const screenWidth = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
+      const isLargeScreen = screenWidth >= 600;
+      container.style.maxWidth = isLargeScreen ? '440px' : '100%';
+      // Word list pills are 30% smaller on tablet/desktop, where the longer
+      // word list was taking up more vertical room than it needed to.
+      document.documentElement.style.setProperty('--pill-scale', isLargeScreen ? '0.7' : '1');
+      // Extra breathing room above the bottom banner on tablet/desktop only —
+      // reported as very slightly overlapping the grid's last row there
+      // (not reproducible in testing, but harmless to pad defensively).
+      // iPhone is unaffected: this only applies on the capped branch.
+      const bottomBanner = document.getElementById('bottom-banner');
+      if (bottomBanner) bottomBanner.style.marginTop = isLargeScreen ? '20px' : '0px';
+    }
+
+    function sizeGrid() {
+      const grid = document.getElementById('grid');
+      const container = document.getElementById('game-container');
+      // Measure the actual rendered width of the game card (capped above on
+      // tablet/desktop, full-width on phones) so the grid scales correctly
+      // across iPhone, iPad, and desktop browser windows.
+      const availableWidth = container.clientWidth * 0.98 * 0.95;
+      
+      grid.style.width = availableWidth + 'px';
+      grid.style.height = availableWidth + 'px';
+    }
+
+    window.addEventListener('resize', () => { applyGameWidthCap(); sizeGrid(); });
+    window.addEventListener('orientationchange', () => { applyGameWidthCap(); sizeGrid(); });
+
+    // ==========================================
+    // TOUCH ENGINE
+    // ==========================================
+    let isDrag = false, anchor = null, trajectory = [];
+
+    const pStart = (e) => { 
+      if (!state.hasStarted) {
+        state.hasStarted = true;
+        startClock();
+      }
+
+      const pt = e.type.includes('touch') ? e.touches[0] : e; 
+      const el = document.elementFromPoint(pt.clientX, pt.clientY); 
+      if(el?.classList.contains('grid-cell')) { 
+        isDrag = true; anchor = el; doVec(anchor, anchor); 
+      } 
+    };
+    
+    const pMove = (e) => { 
+      if(!isDrag || !anchor) return; 
+      e.preventDefault();
+      const pt = e.type.includes('touch') ? e.touches[0] : e; 
+      const el = document.elementFromPoint(pt.clientX, pt.clientY); 
+      if(el?.classList.contains('grid-cell')) doVec(anchor, el); 
+    };
+    
+    const pEnd = () => { 
+      if(isDrag) resolveSwipe(); 
+      isDrag = false; anchor = null; 
+    };
+
+    document.addEventListener('mousedown', pStart); 
+    document.addEventListener('mousemove', pMove); 
+    document.addEventListener('mouseup', pEnd);
+    document.addEventListener('touchstart', pStart, {passive:false}); 
+    document.addEventListener('touchmove', pMove, {passive:false}); 
+    document.addEventListener('touchend', pEnd);
+
+    function doVec(s,e) {
+      const r1 = +s.dataset.r, c1 = +s.dataset.c, r2 = +e.dataset.r, c2 = +e.dataset.c;
+      const dr = r2 - r1, dc = c2 - c1;
+      let sr = 0, sc = 0;
+      
+      if(dr === 0 && dc !== 0) sc = Math.sign(dc); 
+      else if(dc === 0 && dr !== 0) sr = Math.sign(dr); 
+      else if(Math.abs(dr) === Math.abs(dc) && dr !== 0) { sr = Math.sign(dr); sc = Math.sign(dc); } 
+      else if(dr === 0 && dc === 0) {} 
+      else return;
+      
+      document.querySelectorAll('.active-selection').forEach(x => x.classList.remove('active-selection')); 
+      trajectory = [];
+      const dist = Math.max(Math.abs(dr), Math.abs(dc));
+      
+      for(let i = 0; i <= dist; i++){ 
+        let dom = document.querySelector(`.grid-cell[data-r="${r1 + sr * i}"][data-c="${c1 + sc * i}"]`); 
+        if(dom) { dom.classList.add('active-selection'); trajectory.push(dom); } 
+      }
+    }
+
+    function resolveSwipe() {
+      if(trajectory.length === 0) return;
+      const p = trajectory.map(c => ({r: +c.dataset.r, c: +c.dataset.c}));
+      
+      const m = state.targets.find(t => !state.found.includes(t.word) && t.path.length === p.length && 
+        (t.path.every((x,i) => x.r === p[i].r && x.c === p[i].c) || 
+         t.path.every((x,i) => x.r === p[p.length - 1 - i].r && x.c === p[p.length - 1 - i].c))
+      );
+      
+      trajectory.forEach(c => c.classList.remove('active-selection'));
+      
+      if(m) {
+        audioEngine.correct?.play().catch(()=>{}); 
+        state.found.push(m.word);
+        m.path.forEach(pt => document.querySelector(`.grid-cell[data-r="${pt.r}"][data-c="${pt.c}"]`)?.classList.add('found'));
+        paintBankDOM(); 
+        checkWinCondition();
+      } else {
+        audioEngine.wrong?.play().catch(()=>{});
+      }
+      trajectory = [];
+    }
+
+    function checkWinCondition() {
+      if(state.found.length === state.targets.length) {
+        stopClock(); 
+        const isNewRecord = updateBestTime(state.seconds);
+        setTimeout(() => showVictoryModal(isNewRecord), 400);
+      }
+    }
+
+    function showVictoryModal(isNewRecord) {
+      if (isNewRecord) audioEngine.highscore?.play().catch(()=>{});
+      else audioEngine.complete?.play().catch(()=>{});
+
+      let html = `<h2 style="font-family:'Fredoka',sans-serif; font-weight:700; font-size: 36px; background:linear-gradient(135deg, var(--board-a), var(--accent)); -webkit-background-clip:text; background-clip:text; color:transparent;">🎉 ${format(state.seconds)}</h2>`;
+      html += isNewRecord
+        ? `<p style="font-size:14px; font-weight:800; color:var(--accent); margin:4px 0 16px 0;">🏆 New best time on this device!</p>`
+        : `<p style="font-size:14px; font-weight:700; color:var(--text-sec); margin:4px 0 16px 0;">Nicely solved!</p>`;
+      html += `<button onclick="closeModal(); resetGame();" style="background:linear-gradient(135deg, var(--accent), var(--accent-2)); color:#FFF; min-height:54px; width:100%; border-radius:14px; border:none; font-size:18px; font-weight:800; cursor:pointer;">🔁 Play Again</button>`;
+      renderModal(html);
+    }
+
+    function renderModal(h) { document.getElementById('modal-box').innerHTML=h; document.getElementById('modal-backdrop').style.display='flex'; }
+    function closeModal() { document.getElementById('modal-backdrop').style.display='none'; }
+
+    // ==========================================
+    // PWA: register the service worker (enables installability + offline
+    // play after the first load). Registration failing for any reason
+    // (e.g. running locally over file:// during testing) must not break
+    // the game itself, hence the try/catch.
+    // ==========================================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => {
+          console.warn('Service worker registration failed:', err);
+        });
+      });
+    }
+  </script>
+</body>
+
+</html>
