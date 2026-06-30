@@ -23,7 +23,8 @@
       --timer-b: #6366F1;
       --ink: #1E1B4B;
       --text-sec: #6B6F9E;
-      --pill-scale: 1; /* set to 0.7 on tablet/desktop via JS; phones stay at 1 */
+      --pill-scale: 1; /* set to 0.7 on tablet/desktop via JS; phones stay at 1 unless overflowing (see fitPhoneVerticalHeight) */
+      --phone-fit-scale: 1; /* only changed on phones, and only if content would otherwise overflow the screen height; tablet/desktop never touch this */
     }
 
     * {
@@ -34,8 +35,13 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    html, body {
+    html {
       width: 100vw;
+      min-height: 100svh;
+    }
+
+    body {
+      width: 100%;
       min-height: 100svh;
       background: linear-gradient(160deg, var(--bg-a) 0%, var(--bg-b) 100%);
       color: var(--ink);
@@ -57,7 +63,7 @@
       max-width: 100%; 
       display: flex;
       flex-direction: column;
-      gap: 15px;
+      gap: calc(15px * var(--phone-fit-scale));
       align-items: center;
       animation: riseIn 0.5s ease-out;
     }
@@ -266,20 +272,20 @@
       gap: 8px;
       background: var(--cell);
       border-radius: 14px;
-      padding: 10px 22px;
+      padding: calc(10px * var(--phone-fit-scale)) calc(22px * var(--phone-fit-scale));
       box-shadow: 0 3px 10px rgba(79, 70, 229, 0.14);
       border: 2px solid rgba(79, 70, 229, 0.12);
     }
     #best-time-label {
       font-weight: 800;
-      font-size: 14px;
+      font-size: calc(14px * var(--phone-fit-scale));
       letter-spacing: 0.5px;
       color: var(--accent);
     }
     #best-time-value {
       font-family: 'Fredoka', sans-serif;
       font-weight: 700;
-      font-size: 27px;
+      font-size: calc(27px * var(--phone-fit-scale));
       color: var(--ink);
     }
   </style>
@@ -585,6 +591,7 @@
       paintBankDOM();
       applyGameWidthCap();
       sizeGrid(); 
+      fitPhoneVerticalHeight();
     }
 
     function paintGridDOM() {
@@ -649,8 +656,66 @@
       grid.style.height = availableWidth + 'px';
     }
 
-    window.addEventListener('resize', () => { applyGameWidthCap(); sizeGrid(); });
-    window.addEventListener('orientationchange', () => { applyGameWidthCap(); sizeGrid(); });
+    // On a phone, the grid and banners are deliberately kept at full screen
+    // WIDTH (that part already looks right and must not change). But the
+    // total page HEIGHT — banners + grid + however many rows the word list
+    // wraps into that round — can occasionally exceed one screen's worth of
+    // vertical space, forcing a scroll. Rather than guess at a breakpoint,
+    // this measures the actual rendered height after layout and, only if it
+    // truly doesn't fit, shrinks: word-pill size, the gaps between
+    // sections, the best-time card, AND the banners' height (cropping a
+    // little more of the artwork via their existing object-fit: cover,
+    // same technique already used to shorten the bottom banner earlier —
+    // their WIDTH never changes). The grid itself is never touched, so it
+    // always stays full width at its normal size. Tablet/desktop never
+    // call this at all.
+    function fitPhoneVerticalHeight() {
+      const screenWidth = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
+      if (screenWidth >= 600) return; // tablet/desktop: untouched, handled by applyGameWidthCap instead
+
+      const container = document.getElementById('game-container');
+      const topBanner = document.getElementById('top-banner');
+      const bottomBanner = document.getElementById('bottom-banner');
+
+      // Reset to the unscaled baseline first so every measurement starts
+      // from the same known state (important on Reset, where the word
+      // count/wrapping can differ round to round).
+      document.documentElement.style.setProperty('--phone-fit-scale', '1');
+      document.documentElement.style.setProperty('--pill-scale', '1');
+      topBanner.style.height = '';
+      bottomBanner.style.height = '';
+
+      // Measure on the next frame so the reset above has actually applied
+      // before we read layout — otherwise we'd be measuring stale sizes.
+      requestAnimationFrame(() => {
+        const rect = container.getBoundingClientRect();
+        const available = window.innerHeight - rect.top - 20; // 20px safety buffer + body's own bottom padding
+        const needed = rect.height;
+
+        if (needed <= available) return; // already fits — nothing to change
+
+        const scale = Math.max(0.7, (available / needed) * 0.95); // extra 5% safety margin
+        document.documentElement.style.setProperty('--phone-fit-scale', String(scale));
+        document.documentElement.style.setProperty('--pill-scale', String(scale));
+
+        // Banners are the single biggest fixed-height contributors and
+        // weren't covered by the scale above (they're sized via CSS
+        // aspect-ratio, not the --pill-scale/--phone-fit-scale variables).
+        // Crop them by the same scale, each clamped to a floor so the top
+        // banner never clips the 76px-tall timer/reset row underneath it,
+        // and the bottom banner never shrinks down to nothing.
+        const topNatural = topBanner.getBoundingClientRect().height;
+        const bottomNatural = bottomBanner.getBoundingClientRect().height;
+        const topMin = 84;   // 76px HUD row + a little breathing room
+        const bottomMin = 40;
+
+        topBanner.style.height = Math.max(topMin, topNatural * scale) + 'px';
+        bottomBanner.style.height = Math.max(bottomMin, bottomNatural * scale) + 'px';
+      });
+    }
+
+    window.addEventListener('resize', () => { applyGameWidthCap(); sizeGrid(); fitPhoneVerticalHeight(); });
+    window.addEventListener('orientationchange', () => { applyGameWidthCap(); sizeGrid(); fitPhoneVerticalHeight(); });
 
     // ==========================================
     // TOUCH ENGINE
