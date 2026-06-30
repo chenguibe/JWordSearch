@@ -1,17 +1,17 @@
 // JWordSearch service worker
-// Bump CACHE_VERSION any time Index.html or any cached asset changes, so
+// Bump CACHE_VERSION any time index.html or any cached asset changes, so
 // returning players get the update instead of a stale cached copy.
-const CACHE_VERSION = 'jwordsearch-v1';
+const CACHE_VERSION = 'jwordsearch-v2'; // Bumped to v2 to force an update!
 
 // App shell: same-origin files this page needs to run.
 const APP_SHELL = [
   './',
-  './Index.html',
+  './index.html', // FIX 1: Changed to lowercase 'i' so GitHub doesn't throw a 404
   './manifest.json',
 ];
 
 // External assets hosted on GitHub Pages — sounds, banners, and icons.
-// These rarely change, so they're cached aggressively (cache-first).
+// These rarely change, so they're cached aggressively.
 const EXTERNAL_ASSETS = [
   'https://chenguibe.github.io/JWordSearch/SOUND_CORRECT.mp3',
   'https://chenguibe.github.io/JWordSearch/SOUND_WRONG.mp3',
@@ -64,34 +64,34 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// FIX 2: Network First approach for fetching updates
 self.addEventListener('fetch', (event) => {
   // Only handle GET requests; let everything else pass through untouched.
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-
-      // Not cached yet (e.g. first-ever load, or a new asset) — fetch from
-      // the network, and opportunistically cache it for next time.
-      return fetch(event.request)
-        .then((response) => {
-          // Only cache successful, basic (same-origin) responses here;
-          // opaque cross-origin responses from a plain fetch can't be
-          // safely vetted, so they're left to the install-time precache.
-          if (response && response.status === 200 && response.type === 'basic') {
-            const clone = response.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, clone));
+    // 1. Try fetching from the Network FIRST
+    fetch(event.request)
+      .then((response) => {
+        // If the network succeeds, save a fresh copy to the cache
+        if (response && response.status === 200 && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, clone));
+        }
+        return response; // Return the fresh network response to the app
+      })
+      .catch(() => {
+        // 2. If the network fails (user is offline), fallback to the CACHE
+        return caches.match(event.request).then((cached) => {
+          if (cached) {
+            return cached;
           }
-          return response;
-        })
-        .catch(() => {
           // Offline and not cached — nothing more we can do for this request.
           return new Response('Offline and this resource is not cached yet.', {
             status: 503,
             statusText: 'Offline',
           });
         });
-    })
+      })
   );
 });
