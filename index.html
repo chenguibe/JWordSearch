@@ -23,8 +23,8 @@
       --timer-b: #6366F1;
       --ink: #1E1B4B;
       --text-sec: #6B6F9E;
-      --pill-scale: 1; /* set to 0.7 on tablet/desktop via JS; phones stay at 1 unless overflowing (see fitPhoneVerticalHeight) */
-      --phone-fit-scale: 1; /* only changed on phones, and only if content would otherwise overflow the screen height; tablet/desktop never touch this */
+      --pill-scale: 1;
+      --phone-fit-scale: 1;
     }
 
     * {
@@ -48,7 +48,6 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      /* Reduced side padding to 2px to maximize horizontal space */
       padding: 15px 2px;
       overscroll-behavior-y: none; 
       overflow-x: hidden;
@@ -56,10 +55,6 @@
 
     #game-container {
       width: 100%;
-      /* Max-width is set dynamically in JS (see applyGameWidthCap), based on
-         the device's actual screen resolution rather than a static CSS value.
-         Apps Script's web app wrapper can report an inflated page-viewport
-         width even on a phone, so a fixed px cap here isn't safe. */
       max-width: 100%; 
       display: flex;
       flex-direction: column;
@@ -80,6 +75,7 @@
       border-radius: 18px;
       overflow: hidden;
       box-shadow: 0 10px 24px rgba(79, 70, 229, 0.3);
+      flex-shrink: 0;
     }
 
     #banner-img {
@@ -139,6 +135,7 @@
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+      flex-shrink: 0;
     }
 
     .grid-cell {
@@ -182,6 +179,7 @@
       border-radius: 18px;
       overflow: hidden;
       box-shadow: 0 10px 24px rgba(79, 70, 229, 0.3);
+      flex-shrink: 0;
     }
 
     #bottom-banner-img {
@@ -197,10 +195,6 @@
       display: flex; flex-wrap: wrap; justify-content: center;
       gap: calc(10px * var(--pill-scale));
       width: 100%; padding: 0 8px;
-      /* Pulled up to sit on top of the lower portion of the bottom banner.
-         Word count varies each round, so word-bank stays in normal flow and
-         simply grows downward past the banner rather than being boxed into
-         a fixed-height container. */
       margin-top: -60px;
       position: relative;
     }
@@ -290,7 +284,6 @@
     }
   </style>
 
-  <!-- PWA: manifest + icons + theme color -->
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="https://chenguibe.github.io/JWordSearch/icon192.png">
   <link rel="apple-touch-icon" href="https://chenguibe.github.io/JWordSearch/icon192.png">
@@ -299,17 +292,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="JWordSearch">
 
-  <!--
-    JWordSearch - Audio Data Warehouse
-    Sound assets are hosted on GitHub Pages (chenguibe.github.io) rather than
-    embedded as base64, to keep page weight down. The Audio objects below are
-    created immediately (rather than waiting for window.onload), so fetching
-    is already underway well before the player can interact with anything.
-    Note: <link rel=preload as=audio> is intentionally NOT used here —
-    browser support for that combination (notably Safari) is unreliable, so
-    the eager new Audio()/.load() below is the dependable cross-browser way
-    to preload audio specifically.
-  -->
   <script>
     const SOUND_CORRECT   = "https://chenguibe.github.io/JWordSearch/SOUND_CORRECT.mp3";
     const SOUND_WRONG     = "https://chenguibe.github.io/JWordSearch/SOUND_WRONG.mp3";
@@ -317,12 +299,6 @@
     const SOUND_HIGHSCORE = "https://chenguibe.github.io/JWordSearch/SOUND_HIGHSCORE.mp3";
     const SOUND_CLEAR     = "https://chenguibe.github.io/JWordSearch/SOUND_CLEAR.mp3";
 
-    // Eagerly create and start loading every sound right now (head parse
-    // time), instead of waiting for window.onload. This also gives us
-    // ready-to-play Audio objects for the main script to reuse directly
-    // rather than constructing fresh ones later. Built one at a time with
-    // its own try/catch so a single failure can't leave PRELOADED_AUDIO
-    // entirely missing and break startup downstream.
     window.PRELOADED_AUDIO = {};
     [
       ['correct',   SOUND_CORRECT],
@@ -342,11 +318,6 @@
     });
   </script>
 
-  <!--
-    JWordSearch - Graphic UI Data Warehouse
-    Banner images are hosted on GitHub Pages (chenguibe.github.io) rather
-    than embedded as base64, to keep page weight down.
-  -->
   <link rel="preload" as="image" href="https://chenguibe.github.io/JWordSearch/TOP_BANNER.jpeg">
   <link rel="preload" as="image" href="https://chenguibe.github.io/JWordSearch/BOTTOM_BANNER.jpeg">
   <script>
@@ -383,9 +354,7 @@
 
   <script>
     const audioEngine = { correct: null, wrong: null, complete: null, highscore: null, clear: null };
-    
     let state = { seconds: 0, clockId: null, hasStarted: false, grid: [], targets: [], found: [] };
-    
     const DICTIONARY = [
       "SUN", "MOON", "STAR", "CODE", "DATA", "NODE", "HTML", "FILE", "WIFI", "BYTE",
       "PLANET", "ROCKET", "GALAXY", "SYSTEM", "SERVER", "MODULE", "OBJECT", "MEMORY",
@@ -418,137 +387,65 @@
       "MECHANIC", "HIGHWAY", "FREEWAY"
     ];
 
-    // ==========================================
-    // BEST TIME (personal record for this device only, stored in
-    // localStorage — there is no backend/server in the PWA build)
-    // ==========================================
     const BEST_TIME_KEY = 'jwordsearch_best_time';
-
-    function renderBestTime(seconds) {
-      document.getElementById('best-time-value').textContent = format(seconds);
-    }
-
-    function loadBestTime() {
-      try {
-        const stored = localStorage.getItem(BEST_TIME_KEY);
-        if (stored !== null) renderBestTime(parseInt(stored, 10));
-      } catch (e) { /* localStorage unavailable — best time just won't persist */ }
-    }
-
+    function renderBestTime(seconds) { document.getElementById('best-time-value').textContent = format(seconds); }
+    function loadBestTime() { try { const stored = localStorage.getItem(BEST_TIME_KEY); if (stored !== null) renderBestTime(parseInt(stored, 10)); } catch (e) {} }
     function updateBestTime(seconds) {
       try {
         const stored = localStorage.getItem(BEST_TIME_KEY);
         const best = stored !== null ? parseInt(stored, 10) : null;
-        if (best === null || seconds < best) {
-          localStorage.setItem(BEST_TIME_KEY, String(seconds));
-          renderBestTime(seconds);
-          return true; // new record
-        }
-      } catch (e) { /* localStorage unavailable — skip silently */ }
+        if (best === null || seconds < best) { localStorage.setItem(BEST_TIME_KEY, String(seconds)); renderBestTime(seconds); return true; }
+      } catch (e) {}
       return false;
     }
 
-    // ==========================================
-    // LOADING PROGRESS (5 sounds + 2 banner images = 7 assets)
-    // ==========================================
     function initLoadProgress() {
       const bar = document.getElementById('load-progress-bar');
       const text = document.getElementById('load-progress-text');
       const wrap = document.getElementById('load-progress');
       if (!bar || !text || !wrap) return;
-
       const audioObjs = (window.PRELOADED_AUDIO && Object.values(window.PRELOADED_AUDIO)) || [];
-      const total = audioObjs.length + 2; // + the 2 banner images
+      const total = audioObjs.length + 2;
       let loaded = 0;
-
-      function finishUp() {
-        wrap.style.opacity = '0';
-        setTimeout(() => wrap.remove(), 400);
-      }
-
+      function finishUp() { wrap.style.opacity = '0'; setTimeout(() => wrap.remove(), 400); }
       function tick() {
         loaded = Math.min(loaded + 1, total);
         bar.style.width = Math.round((loaded / total) * 100) + '%';
         text.textContent = loaded < total ? `Loading assets… ${loaded}/${total}` : 'Ready!';
         if (loaded >= total) setTimeout(finishUp, 300);
       }
-
-      audioObjs.forEach(a => {
-        if (a.readyState >= 4) { tick(); return; } // already buffered enough to play through
-        a.addEventListener('canplaythrough', tick, { once: true });
-        a.addEventListener('error', tick, { once: true }); // don't get stuck if a sound fails
-      });
-
-      [['banner-img'], ['bottom-banner-img']].forEach(([id]) => {
-        const img = document.getElementById(id);
-        img.addEventListener('load', tick, { once: true });
-        img.addEventListener('error', tick, { once: true });
-      });
-
-      // Safety net: never leave the bar stuck on screen if something hangs
+      audioObjs.forEach(a => { if (a.readyState >= 4) { tick(); return; } a.addEventListener('canplaythrough', tick, { once: true }); a.addEventListener('error', tick, { once: true }); });
+      [['banner-img'], ['bottom-banner-img']].forEach(([id]) => { const img = document.getElementById(id); img.addEventListener('load', tick, { once: true }); img.addEventListener('error', tick, { once: true }); });
       setTimeout(() => { if (loaded < total) finishUp(); }, 8000);
     }
 
-    // DOMContentLoaded fires as soon as this page's own HTML is parsed —
-    // unlike window.onload, it does NOT wait for external resources (the
-    // banner images or audio) to finish downloading. This is what makes the
-    // grid appear immediately, while the banner images/audio keep loading
-    // quietly in the background and simply pop in whenever they're ready.
     document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('banner-img').src = TOP_BANNER;
       document.getElementById('bottom-banner-img').src = BOTTOM_BANNER;
-
-      // Reuse the Audio objects created in <head> (Audio.html), which have
-      // already been loading since before body even started parsing —
-      // creating fresh ones here would just trigger a second, redundant
-      // fetch of the same files. Wrapped defensively: if this ever throws
-      // (e.g. PRELOADED_AUDIO missing for any reason), it must not prevent
-      // the grid below from rendering — that was silently happening before.
       try {
-        audioEngine.correct   = window.PRELOADED_AUDIO.correct;
-        audioEngine.wrong     = window.PRELOADED_AUDIO.wrong;
-        audioEngine.complete  = window.PRELOADED_AUDIO.complete;
+        audioEngine.correct = window.PRELOADED_AUDIO.correct;
+        audioEngine.wrong = window.PRELOADED_AUDIO.wrong;
+        audioEngine.complete = window.PRELOADED_AUDIO.complete;
         audioEngine.highscore = window.PRELOADED_AUDIO.highscore;
-        audioEngine.clear     = window.PRELOADED_AUDIO.clear;
+        audioEngine.clear = window.PRELOADED_AUDIO.clear;
       } catch (e) { console.warn('Audio setup failed, continuing without sound:', e); }
-
       try { loadBestTime(); } catch (e) { console.warn('Best-time load failed:', e); }
       try { initLoadProgress(); } catch (e) { console.warn('Load-progress bar failed:', e); }
-
-      resetGame(); // must always run, no matter what happened above
+      resetGame();
     });
 
-    // iOS Safari only allows audio playback that's directly tied to a user
-    // gesture. The very first play() on each element must happen inside a
-    // real touch/click; this "unlocks" it so later programmatic play()
-    // calls (e.g. on a correct/wrong match) keep working for the rest of
-    // the session. Chrome doesn't need this, which is why it worked there
-    // already but stayed silent on iPhone.
     let audioUnlocked = false;
     function unlockAudio() {
       if (audioUnlocked) return;
       audioUnlocked = true;
-      Object.values(audioEngine).forEach(a => {
-        if (!a) return;
-        a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {});
-      });
+      Object.values(audioEngine).forEach(a => { if (!a) return; a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {}); });
     }
     document.addEventListener('touchstart', unlockAudio, { once: true });
     document.addEventListener('mousedown', unlockAudio, { once: true });
 
-    document.getElementById('btn-reset').onclick = () => {
-      audioEngine.clear?.play().catch(()=>{});
-      resetGame();
-    };
+    document.getElementById('btn-reset').onclick = () => { audioEngine.clear?.play().catch(()=>{}); resetGame(); };
 
-    function startClock() {
-      clearInterval(state.clockId);
-      state.clockId = setInterval(() => { 
-        state.seconds++; 
-        document.getElementById('hud-timer').innerText = format(state.seconds); 
-      }, 1000);
-    }
-    
+    function startClock() { clearInterval(state.clockId); state.clockId = setInterval(() => { state.seconds++; document.getElementById('hud-timer').innerText = format(state.seconds); }, 1000); }
     function stopClock() { clearInterval(state.clockId); }
     function format(sec) { return `${(sec/60|0).toString().padStart(2,'0')}:${(sec%60).toString().padStart(2,'0')}`; }
     function shuffle(a) { return [...a].sort(() => Math.random() - 0.5); }
@@ -557,15 +454,11 @@
       stopClock();
       state = { seconds: 0, clockId: null, hasStarted: false, grid: [], targets: [], found: [] };
       document.getElementById('hud-timer').innerText = "00:00";
-      
       let grid = Array(10).fill(0).map(() => Array(10).fill(''));
-      // Grid is 10x10, so the longest a straight (incl. diagonal) line can be is 10 cells.
       const pool = DICTIONARY.filter(w => w.length >= 3 && w.length <= 10);
       const chosen = shuffle(pool).slice(0, 10);
-
       let placed = [];
       const vecs = [[0,1], [1,0], [1,1], [-1,1], [1,-1], [-1,-1], [0,-1], [-1,0]];
-
       chosen.forEach(w => {
         for(let att=0; att<200; att++) {
           let r = Math.random()*10|0, c = Math.random()*10|0;
@@ -579,263 +472,90 @@
           if(fit) { p.forEach((pt,idx) => grid[pt.r][pt.c] = w[idx]); placed.push({word:w, path:p}); break; }
         }
       });
-
       const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
       grid = grid.map(row => row.map(cell => cell || alpha[Math.random()*26|0]));
-      
-      state.grid = grid; 
-      state.targets = placed; 
-      state.found = [];
-      
-      paintGridDOM(); 
-      paintBankDOM();
-      applyGameWidthCap();
-      sizeGrid(); 
-      fitPhoneVerticalHeight();
+      state.grid = grid; state.targets = placed; state.found = [];
+      paintGridDOM(); paintBankDOM(); applyGameWidthCap(); sizeGrid(); fitPhoneVerticalHeight();
     }
 
-    function paintGridDOM() {
-      const dom = document.getElementById('grid');
-      dom.innerHTML = '';
-      
-      state.grid.forEach((r,i) => r.forEach((c,j) => {
-        let div = document.createElement('div'); 
-        div.className = 'grid-cell'; 
-        div.dataset.r = i; 
-        div.dataset.c = j; 
-        div.innerText = c; 
-        dom.appendChild(div);
-      }));
-    }
-
-    function paintBankDOM() {
-      const b = document.getElementById('word-bank'); 
-      b.innerHTML = '';
-      state.targets.forEach(t => {
-        let s = document.createElement('span'); 
-        s.className = `word-pill ${state.found.includes(t.word)?'found-pill':''}`; 
-        s.innerText = t.word;
-        b.appendChild(s);
-      });
-    }
-
-    // ==========================================
-    // ABSOLUTE MAXIMUM HORIZONTAL SIZING
-    // ==========================================
+    function paintGridDOM() { const dom = document.getElementById('grid'); dom.innerHTML = ''; state.grid.forEach((r,i) => r.forEach((c,j) => { let div = document.createElement('div'); div.className = 'grid-cell'; div.dataset.r = i; div.dataset.c = j; div.innerText = c; dom.appendChild(div); })); }
+    function paintBankDOM() { const b = document.getElementById('word-bank'); b.innerHTML = ''; state.targets.forEach(t => { let s = document.createElement('span'); s.className = `word-pill ${state.found.includes(t.word)?'found-pill':''}`; s.innerText = t.word; b.appendChild(s); }); }
     function applyGameWidthCap() {
       const container = document.getElementById('game-container');
-      // Use the device's actual screen resolution, not the page's own layout
-      // viewport (window.innerWidth/clientWidth) — Apps Script's web app
-      // wrapper can report an inflated, desktop-style viewport width even on
-      // a phone, which made a CSS max-width cap shrink the whole card on an
-      // actual iPhone. screen.width reflects the real hardware display and
-      // isn't affected by that wrapper quirk.
       const screenWidth = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
       const isLargeScreen = screenWidth >= 600;
       container.style.maxWidth = isLargeScreen ? '440px' : '100%';
-      // Word list pills are 30% smaller on tablet/desktop, where the longer
-      // word list was taking up more vertical room than it needed to.
       document.documentElement.style.setProperty('--pill-scale', isLargeScreen ? '0.7' : '1');
-      // Extra breathing room above the bottom banner on tablet/desktop only —
-      // reported as very slightly overlapping the grid's last row there
-      // (not reproducible in testing, but harmless to pad defensively).
-      // iPhone is unaffected: this only applies on the capped branch.
       const bottomBanner = document.getElementById('bottom-banner');
       if (bottomBanner) bottomBanner.style.marginTop = isLargeScreen ? '20px' : '0px';
     }
-
-    function sizeGrid() {
-      const grid = document.getElementById('grid');
-      const container = document.getElementById('game-container');
-      // Measure the actual rendered width of the game card (capped above on
-      // tablet/desktop, full-width on phones) so the grid scales correctly
-      // across iPhone, iPad, and desktop browser windows.
-      const availableWidth = container.clientWidth * 0.98 * 0.95;
-      
-      grid.style.width = availableWidth + 'px';
-      grid.style.height = availableWidth + 'px';
-    }
-
-    // On a phone, the grid and banners are deliberately kept at full screen
-    // WIDTH (that part already looks right and must not change). But the
-    // total page HEIGHT — banners + grid + however many rows the word list
-    // wraps into that round — can occasionally exceed one screen's worth of
-    // vertical space, forcing a scroll. Rather than guess at a breakpoint,
-    // this measures the actual rendered height after layout and, only if it
-    // truly doesn't fit, shrinks: word-pill size, the gaps between
-    // sections, the best-time card, AND the banners' height (cropping a
-    // little more of the artwork via their existing object-fit: cover,
-    // same technique already used to shorten the bottom banner earlier —
-    // their WIDTH never changes). The grid itself is never touched, so it
-    // always stays full width at its normal size. Tablet/desktop never
-    // call this at all.
+    function sizeGrid() { const grid = document.getElementById('grid'); const container = document.getElementById('game-container'); const availableWidth = container.clientWidth * 0.98 * 0.95; grid.style.width = availableWidth + 'px'; grid.style.height = availableWidth + 'px'; }
     function fitPhoneVerticalHeight() {
       const screenWidth = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
-      if (screenWidth >= 600) return; // tablet/desktop: untouched, handled by applyGameWidthCap instead
-
+      if (screenWidth >= 600) return;
       const container = document.getElementById('game-container');
       const topBanner = document.getElementById('top-banner');
       const bottomBanner = document.getElementById('bottom-banner');
-
-      // Reset to the unscaled baseline first so every measurement starts
-      // from the same known state (important on Reset, where the word
-      // count/wrapping can differ round to round).
       document.documentElement.style.setProperty('--phone-fit-scale', '1');
       document.documentElement.style.setProperty('--pill-scale', '1');
       topBanner.style.height = '';
       bottomBanner.style.height = '';
-
-      // Measure on the next frame so the reset above has actually applied
-      // before we read layout — otherwise we'd be measuring stale sizes.
       requestAnimationFrame(() => {
         const rect = container.getBoundingClientRect();
-        const available = window.innerHeight - rect.top - 20; // 20px safety buffer + body's own bottom padding
+        const available = window.innerHeight - rect.top - 20;
         const needed = rect.height;
-
-        if (needed <= available) return; // already fits — nothing to change
-
-        const scale = Math.max(0.7, (available / needed) * 0.95); // extra 5% safety margin
+        if (needed <= available) return;
+        const scale = Math.max(0.7, (available / needed) * 0.95);
         document.documentElement.style.setProperty('--phone-fit-scale', String(scale));
         document.documentElement.style.setProperty('--pill-scale', String(scale));
-
-        // Banners are the single biggest fixed-height contributors and
-        // weren't covered by the scale above (they're sized via CSS
-        // aspect-ratio, not the --pill-scale/--phone-fit-scale variables).
-        // Crop them by the same scale, each clamped to a floor so the top
-        // banner never clips the 76px-tall timer/reset row underneath it,
-        // and the bottom banner never shrinks down to nothing.
         const topNatural = topBanner.getBoundingClientRect().height;
         const bottomNatural = bottomBanner.getBoundingClientRect().height;
-        const topMin = 84;   // 76px HUD row + a little breathing room
-        const bottomMin = 40;
-
-        topBanner.style.height = Math.max(topMin, topNatural * scale) + 'px';
-        bottomBanner.style.height = Math.max(bottomMin, bottomNatural * scale) + 'px';
+        topBanner.style.height = Math.max(84, topNatural * scale) + 'px';
+        bottomBanner.style.height = Math.max(40, bottomNatural * scale) + 'px';
       });
     }
-
     window.addEventListener('resize', () => { applyGameWidthCap(); sizeGrid(); fitPhoneVerticalHeight(); });
     window.addEventListener('orientationchange', () => { applyGameWidthCap(); sizeGrid(); fitPhoneVerticalHeight(); });
 
-    // ==========================================
-    // TOUCH ENGINE
-    // ==========================================
     let isDrag = false, anchor = null, trajectory = [];
-
-    const pStart = (e) => { 
-      if (!state.hasStarted) {
-        state.hasStarted = true;
-        startClock();
-      }
-
-      const pt = e.type.includes('touch') ? e.touches[0] : e; 
-      const el = document.elementFromPoint(pt.clientX, pt.clientY); 
-      if(el?.classList.contains('grid-cell')) { 
-        isDrag = true; anchor = el; doVec(anchor, anchor); 
-      } 
-    };
-    
-    const pMove = (e) => { 
-      if(!isDrag || !anchor) return; 
-      e.preventDefault();
-      const pt = e.type.includes('touch') ? e.touches[0] : e; 
-      const el = document.elementFromPoint(pt.clientX, pt.clientY); 
-      if(el?.classList.contains('grid-cell')) doVec(anchor, el); 
-    };
-    
-    const pEnd = () => { 
-      if(isDrag) resolveSwipe(); 
-      isDrag = false; anchor = null; 
-    };
-
-    document.addEventListener('mousedown', pStart); 
-    document.addEventListener('mousemove', pMove); 
-    document.addEventListener('mouseup', pEnd);
-    document.addEventListener('touchstart', pStart, {passive:false}); 
-    document.addEventListener('touchmove', pMove, {passive:false}); 
-    document.addEventListener('touchend', pEnd);
+    const pStart = (e) => { if (!state.hasStarted) { state.hasStarted = true; startClock(); } const pt = e.type.includes('touch') ? e.touches[0] : e; const el = document.elementFromPoint(pt.clientX, pt.clientY); if(el?.classList.contains('grid-cell')) { isDrag = true; anchor = el; doVec(anchor, anchor); } };
+    const pMove = (e) => { if(!isDrag || !anchor) return; e.preventDefault(); const pt = e.type.includes('touch') ? e.touches[0] : e; const el = document.elementFromPoint(pt.clientX, pt.clientY); if(el?.classList.contains('grid-cell')) doVec(anchor, el); };
+    const pEnd = () => { if(isDrag) resolveSwipe(); isDrag = false; anchor = null; };
+    document.addEventListener('mousedown', pStart); document.addEventListener('mousemove', pMove); document.addEventListener('mouseup', pEnd);
+    document.addEventListener('touchstart', pStart, {passive:false}); document.addEventListener('touchmove', pMove, {passive:false}); document.addEventListener('touchend', pEnd);
 
     function doVec(s,e) {
       const r1 = +s.dataset.r, c1 = +s.dataset.c, r2 = +e.dataset.r, c2 = +e.dataset.c;
       const dr = r2 - r1, dc = c2 - c1;
       let sr = 0, sc = 0;
-      
-      if(dr === 0 && dc !== 0) sc = Math.sign(dc); 
-      else if(dc === 0 && dr !== 0) sr = Math.sign(dr); 
-      else if(Math.abs(dr) === Math.abs(dc) && dr !== 0) { sr = Math.sign(dr); sc = Math.sign(dc); } 
-      else if(dr === 0 && dc === 0) {} 
-      else return;
-      
+      if(dr === 0 && dc !== 0) sc = Math.sign(dc); else if(dc === 0 && dr !== 0) sr = Math.sign(dr); else if(Math.abs(dr) === Math.abs(dc) && dr !== 0) { sr = Math.sign(dr); sc = Math.sign(dc); } else if(dr === 0 && dc === 0) {} else return;
       document.querySelectorAll('.active-selection').forEach(x => x.classList.remove('active-selection')); 
       trajectory = [];
       const dist = Math.max(Math.abs(dr), Math.abs(dc));
-      
-      for(let i = 0; i <= dist; i++){ 
-        let dom = document.querySelector(`.grid-cell[data-r="${r1 + sr * i}"][data-c="${c1 + sc * i}"]`); 
-        if(dom) { dom.classList.add('active-selection'); trajectory.push(dom); } 
-      }
+      for(let i = 0; i <= dist; i++){ let dom = document.querySelector(`.grid-cell[data-r="${r1 + sr * i}"][data-c="${c1 + sc * i}"]`); if(dom) { dom.classList.add('active-selection'); trajectory.push(dom); } }
     }
 
     function resolveSwipe() {
       if(trajectory.length === 0) return;
       const p = trajectory.map(c => ({r: +c.dataset.r, c: +c.dataset.c}));
-      
-      const m = state.targets.find(t => !state.found.includes(t.word) && t.path.length === p.length && 
-        (t.path.every((x,i) => x.r === p[i].r && x.c === p[i].c) || 
-         t.path.every((x,i) => x.r === p[p.length - 1 - i].r && x.c === p[p.length - 1 - i].c))
-      );
-      
+      const m = state.targets.find(t => !state.found.includes(t.word) && t.path.length === p.length && (t.path.every((x,i) => x.r === p[i].r && x.c === p[i].c) || t.path.every((x,i) => x.r === p[p.length - 1 - i].r && x.c === p[p.length - 1 - i].c)));
       trajectory.forEach(c => c.classList.remove('active-selection'));
-      
-      if(m) {
-        audioEngine.correct?.play().catch(()=>{}); 
-        state.found.push(m.word);
-        m.path.forEach(pt => document.querySelector(`.grid-cell[data-r="${pt.r}"][data-c="${pt.c}"]`)?.classList.add('found'));
-        paintBankDOM(); 
-        checkWinCondition();
-      } else {
-        audioEngine.wrong?.play().catch(()=>{});
-      }
+      if(m) { audioEngine.correct?.play().catch(()=>{}); state.found.push(m.word); m.path.forEach(pt => document.querySelector(`.grid-cell[data-r="${pt.r}"][data-c="${pt.c}"]`)?.classList.add('found')); paintBankDOM(); checkWinCondition(); } else { audioEngine.wrong?.play().catch(()=>{}); }
       trajectory = [];
     }
 
-    function checkWinCondition() {
-      if(state.found.length === state.targets.length) {
-        stopClock(); 
-        const isNewRecord = updateBestTime(state.seconds);
-        setTimeout(() => showVictoryModal(isNewRecord), 400);
-      }
-    }
-
+    function checkWinCondition() { if(state.found.length === state.targets.length) { stopClock(); const isNewRecord = updateBestTime(state.seconds); setTimeout(() => showVictoryModal(isNewRecord), 400); } }
     function showVictoryModal(isNewRecord) {
-      if (isNewRecord) audioEngine.highscore?.play().catch(()=>{});
-      else audioEngine.complete?.play().catch(()=>{});
-
+      if (isNewRecord) audioEngine.highscore?.play().catch(()=>{}); else audioEngine.complete?.play().catch(()=>{});
       let html = `<h2 style="font-family:'Fredoka',sans-serif; font-weight:700; font-size: 36px; background:linear-gradient(135deg, var(--board-a), var(--accent)); -webkit-background-clip:text; background-clip:text; color:transparent;">🎉 ${format(state.seconds)}</h2>`;
-      html += isNewRecord
-        ? `<p style="font-size:14px; font-weight:800; color:var(--accent); margin:4px 0 16px 0;">🏆 New best time on this device!</p>`
-        : `<p style="font-size:14px; font-weight:700; color:var(--text-sec); margin:4px 0 16px 0;">Nicely solved!</p>`;
+      html += isNewRecord ? `<p style="font-size:14px; font-weight:800; color:var(--accent); margin:4px 0 16px 0;">🏆 New best time on this device!</p>` : `<p style="font-size:14px; font-weight:700; color:var(--text-sec); margin:4px 0 16px 0;">Nicely solved!</p>`;
       html += `<button onclick="closeModal(); resetGame();" style="background:linear-gradient(135deg, var(--accent), var(--accent-2)); color:#FFF; min-height:54px; width:100%; border-radius:14px; border:none; font-size:18px; font-weight:800; cursor:pointer;">🔁 Play Again</button>`;
       renderModal(html);
     }
-
     function renderModal(h) { document.getElementById('modal-box').innerHTML=h; document.getElementById('modal-backdrop').style.display='flex'; }
     function closeModal() { document.getElementById('modal-backdrop').style.display='none'; }
 
-    // ==========================================
-    // PWA: register the service worker (enables installability + offline
-    // play after the first load). Registration failing for any reason
-    // (e.g. running locally over file:// during testing) must not break
-    // the game itself, hence the try/catch.
-    // ==========================================
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(err => {
-          console.warn('Service worker registration failed:', err);
-        });
-      });
-    }
+    if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(err => { console.warn('Service worker registration failed:', err); }); }); }
   </script>
 </body>
-
 </html>
