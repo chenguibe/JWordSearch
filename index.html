@@ -199,10 +199,11 @@
       position: relative;
     }
 
+    /* FIX 2: Reduced font size and padding by ~10% for a cleaner look */
     .word-pill {
       background: var(--cell); border-radius: 999px;
-      padding: calc(13px * var(--pill-scale)) calc(22px * var(--pill-scale));
-      font-weight: 800; font-size: calc(22px * var(--pill-scale)); color: var(--ink);
+      padding: calc(11px * var(--pill-scale)) calc(20px * var(--pill-scale));
+      font-weight: 800; font-size: calc(20px * var(--pill-scale)); color: var(--ink);
       border: 2px solid rgba(79,70,229,0.12);
       box-shadow: 0 3px 10px rgba(79,70,229,0.14);
       transition: all 0.3s;
@@ -480,6 +481,7 @@
 
     function paintGridDOM() { const dom = document.getElementById('grid'); dom.innerHTML = ''; state.grid.forEach((r,i) => r.forEach((c,j) => { let div = document.createElement('div'); div.className = 'grid-cell'; div.dataset.r = i; div.dataset.c = j; div.innerText = c; dom.appendChild(div); })); }
     function paintBankDOM() { const b = document.getElementById('word-bank'); b.innerHTML = ''; state.targets.forEach(t => { let s = document.createElement('span'); s.className = `word-pill ${state.found.includes(t.word)?'found-pill':''}`; s.innerText = t.word; b.appendChild(s); }); }
+    
     function applyGameWidthCap() {
       const container = document.getElementById('game-container');
       const screenWidth = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
@@ -487,8 +489,11 @@
       container.style.maxWidth = isLargeScreen ? '440px' : '100%';
       document.documentElement.style.setProperty('--pill-scale', isLargeScreen ? '0.7' : '1');
       const bottomBanner = document.getElementById('bottom-banner');
-      if (bottomBanner) bottomBanner.style.marginTop = isLargeScreen ? '20px' : '0px';
+      
+      // FIX 1: Replaced '0px' with '16px' to forcibly push the banner away from the grid on mobile
+      if (bottomBanner) bottomBanner.style.marginTop = isLargeScreen ? '20px' : '16px'; 
     }
+    
     function sizeGrid() { const grid = document.getElementById('grid'); const container = document.getElementById('game-container'); const availableWidth = container.clientWidth * 0.98 * 0.95; grid.style.width = availableWidth + 'px'; grid.style.height = availableWidth + 'px'; }
     function fitPhoneVerticalHeight() {
       const screenWidth = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
@@ -549,13 +554,4 @@
       if (isNewRecord) audioEngine.highscore?.play().catch(()=>{}); else audioEngine.complete?.play().catch(()=>{});
       let html = `<h2 style="font-family:'Fredoka',sans-serif; font-weight:700; font-size: 36px; background:linear-gradient(135deg, var(--board-a), var(--accent)); -webkit-background-clip:text; background-clip:text; color:transparent;">🎉 ${format(state.seconds)}</h2>`;
       html += isNewRecord ? `<p style="font-size:14px; font-weight:800; color:var(--accent); margin:4px 0 16px 0;">🏆 New best time on this device!</p>` : `<p style="font-size:14px; font-weight:700; color:var(--text-sec); margin:4px 0 16px 0;">Nicely solved!</p>`;
-      html += `<button onclick="closeModal(); resetGame();" style="background:linear-gradient(135deg, var(--accent), var(--accent-2)); color:#FFF; min-height:54px; width:100%; border-radius:14px; border:none; font-size:18px; font-weight:800; cursor:pointer;">🔁 Play Again</button>`;
-      renderModal(html);
-    }
-    function renderModal(h) { document.getElementById('modal-box').innerHTML=h; document.getElementById('modal-backdrop').style.display='flex'; }
-    function closeModal() { document.getElementById('modal-backdrop').style.display='none'; }
-
-    if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(err => { console.warn('Service worker registration failed:', err); }); }); }
-  </script>
-</body>
-</html>
+      html += `<button onclick="closeModal(); resetGame();" style="background:linear-gradient(135deg, var(--accent), var(--accent-2)); color:#FFF; min-height:54px; width:100%; border-radius
