@@ -134,7 +134,12 @@
       border: 8px solid var(--accent-2);
       border-radius: 20px;
       width: 100%;
-      aspect-ratio: 1/1;
+      /* aspect-ratio removed: JS always sets explicit width+height, so this
+         is redundant. On Safari iOS it can compete with the JS-set height
+         during fr-unit row layout, causing the last row to overflow the
+         border. Chrome never shows this, which is why it only appeared on
+         the real iPhone and not in desktop testing. */
+      overflow: hidden; /* guard: any sub-pixel fr rounding stays inside the border */
       box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.35), inset 0 4px 10px rgba(30, 27, 75, 0.3), 0 14px 32px rgba(79, 70, 229, 0.35);
       touch-action: none;
       user-select: none;
