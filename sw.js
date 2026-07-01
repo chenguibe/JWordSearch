@@ -1,17 +1,24 @@
 // JWordSearch service worker
-// Bump CACHE_VERSION any time index.html or any cached asset changes, so
-// returning players get the update instead of a stale cached copy.
-const CACHE_VERSION = 'jwordsearch-v2'; // Bumped to v2 to force an update!
+// Caching strategy:
+//   - Same-origin files (index.html, manifest.json): NETWORK-FIRST — always
+//     checks the server for updates first, falls back to cache when offline.
+//     This means any change to index.html is picked up immediately without
+//     needing to bump CACHE_VERSION.
+//   - External GitHub-hosted assets (sounds, banners, icons): CACHE-FIRST —
+//     served from cache when available; only hits the network on a miss.
+//     These rarely change so this keeps load times fast.
+// Bump CACHE_VERSION if you need to force-evict old cached external assets.
+const CACHE_VERSION = 'jwordsearch-v1';
 
 // App shell: same-origin files this page needs to run.
 const APP_SHELL = [
   './',
-  './index.html', // FIX 1: Changed to lowercase 'i' so GitHub doesn't throw a 404
+  './index.html',
   './manifest.json',
 ];
 
 // External assets hosted on GitHub Pages — sounds, banners, and icons.
-// These rarely change, so they're cached aggressively.
+// These rarely change, so they're cached aggressively (cache-first).
 const EXTERNAL_ASSETS = [
   'https://chenguibe.github.io/JWordSearch/SOUND_CORRECT.mp3',
   'https://chenguibe.github.io/JWordSearch/SOUND_WRONG.mp3',
@@ -64,34 +71,60 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// FIX 2: Network First approach for fetching updates
 self.addEventListener('fetch', (event) => {
   // Only handle GET requests; let everything else pass through untouched.
   if (event.request.method !== 'GET') return;
 
-  event.respondWith(
-    // 1. Try fetching from the Network FIRST
-    fetch(event.request)
-      .then((response) => {
-        // If the network succeeds, save a fresh copy to the cache
-        if (response && response.status === 200 && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, clone));
-        }
-        return response; // Return the fresh network response to the app
-      })
-      .catch(() => {
-        // 2. If the network fails (user is offline), fallback to the CACHE
-        return caches.match(event.request).then((cached) => {
-          if (cached) {
-            return cached;
+  const url = new URL(event.request.url);
+  const isSameOrigin = url.origin === self.location.origin;
+  const isExternalAsset = EXTERNAL_ASSETS.includes(event.request.url);
+
+  if (isSameOrigin) {
+    // NETWORK-FIRST for same-origin files (index.html, manifest.json, sw.js).
+    // Always tries the server first so any update to index.html is picked up
+    // immediately — the cached copy is only used as a fallback when offline.
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Update the cache with the fresh copy for offline use.
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, clone));
           }
-          // Offline and not cached — nothing more we can do for this request.
-          return new Response('Offline and this resource is not cached yet.', {
-            status: 503,
-            statusText: 'Offline',
-          });
-        });
+          return response;
+        })
+        .catch(() => {
+          // Offline — serve from cache if we have it, otherwise 503.
+          return caches.match(event.request).then((cached) =>
+            cached ||
+            new Response('Offline and this resource is not cached yet.', {
+              status: 503,
+              statusText: 'Offline',
+            })
+          );
+        })
+    );
+  } else if (isExternalAsset) {
+    // CACHE-FIRST for external GitHub-hosted assets (sounds, banners, icons).
+    // These rarely change and are expensive to re-fetch on every load, so we
+    // serve from cache when available and only go to the network on a miss.
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request, { mode: 'no-cors' })
+          .then((response) => {
+            const clone = response.clone();
+            caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, clone));
+            return response;
+          })
+          .catch(() =>
+            new Response('Offline and this asset is not cached yet.', {
+              status: 503,
+              statusText: 'Offline',
+            })
+          );
       })
-  );
+    );
+  }
+  // Any other request (e.g. Google Fonts) — fall through, no SW involvement.
 });
