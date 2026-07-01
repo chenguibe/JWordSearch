@@ -657,33 +657,25 @@
     }
 
     // On a phone, the grid and banners are deliberately kept at full screen
-    // WIDTH (that part already looks right and must not change). But the
-    // total page HEIGHT — banners + grid + however many rows the word list
-    // wraps into that round — can occasionally exceed one screen's worth of
-    // vertical space, forcing a scroll. Rather than guess at a breakpoint,
-    // this measures the actual rendered height after layout and, only if it
-    // truly doesn't fit, shrinks: word-pill size, the gaps between
-    // sections, the best-time card, AND the banners' height (cropping a
-    // little more of the artwork via their existing object-fit: cover,
-    // same technique already used to shorten the bottom banner earlier —
-    // their WIDTH never changes). The grid itself is never touched, so it
-    // always stays full width at its normal size. Tablet/desktop never
-    // call this at all.
+    // WIDTH (that part already looks right and must not change). The total
+    // page HEIGHT can occasionally run slightly long depending on how many
+    // rows the word list wraps into that round. Rather than guess at a
+    // breakpoint, this measures the actual rendered height after layout
+    // and, only if it truly doesn't fit, shrinks word-pill size, the gaps
+    // between sections, and the best-time card just enough to fit — never
+    // touching the grid or banners, which stay full width at their normal
+    // size. Tablet/desktop never call this at all.
     function fitPhoneVerticalHeight() {
       const screenWidth = window.screen && window.screen.width ? window.screen.width : window.innerWidth;
       if (screenWidth >= 600) return; // tablet/desktop: untouched, handled by applyGameWidthCap instead
 
       const container = document.getElementById('game-container');
-      const topBanner = document.getElementById('top-banner');
-      const bottomBanner = document.getElementById('bottom-banner');
 
       // Reset to the unscaled baseline first so every measurement starts
       // from the same known state (important on Reset, where the word
       // count/wrapping can differ round to round).
       document.documentElement.style.setProperty('--phone-fit-scale', '1');
       document.documentElement.style.setProperty('--pill-scale', '1');
-      topBanner.style.height = '';
-      bottomBanner.style.height = '';
 
       // Measure on the next frame so the reset above has actually applied
       // before we read layout — otherwise we'd be measuring stale sizes.
@@ -697,20 +689,6 @@
         const scale = Math.max(0.7, (available / needed) * 0.95); // extra 5% safety margin
         document.documentElement.style.setProperty('--phone-fit-scale', String(scale));
         document.documentElement.style.setProperty('--pill-scale', String(scale));
-
-        // Banners are the single biggest fixed-height contributors and
-        // weren't covered by the scale above (they're sized via CSS
-        // aspect-ratio, not the --pill-scale/--phone-fit-scale variables).
-        // Crop them by the same scale, each clamped to a floor so the top
-        // banner never clips the 76px-tall timer/reset row underneath it,
-        // and the bottom banner never shrinks down to nothing.
-        const topNatural = topBanner.getBoundingClientRect().height;
-        const bottomNatural = bottomBanner.getBoundingClientRect().height;
-        const topMin = 84;   // 76px HUD row + a little breathing room
-        const bottomMin = 40;
-
-        topBanner.style.height = Math.max(topMin, topNatural * scale) + 'px';
-        bottomBanner.style.height = Math.max(bottomMin, bottomNatural * scale) + 'px';
       });
     }
 
